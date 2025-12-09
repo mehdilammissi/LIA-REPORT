@@ -46,7 +46,7 @@ int mode = 1;
 #define BTN_RIGHT  0xBC43FF00
 #define BTN_DOWN   0xEA15FF00
 #define BTN_OK     0xBF40FF00    // USED FOR SPEED UP
-// *** UPDATED BTN_STOP with confirmed '5' button code (0xE718FF00) ***
+// *** Confirmed '5' button code for SPEED DOWN ***
 #define BTN_STOP   0xE718FF00    // Confirmed code for '5' button / SPEED DOWN
 #define BTN_MODE1  0xE916FF00
 #define BTN_MODE2  0xE619FF00
@@ -191,12 +191,12 @@ void modeIRControl() {
       lastDirectionCode = BTN_DOWN;
       break;
     case BTN_LEFT: 
-      // *** CHANGE HERE: Use currentSpeed for turning ***
+      // Use currentSpeed for turning
       left(currentSpeed); 
       lastDirectionCode = BTN_LEFT;
       break;
     case BTN_RIGHT: 
-      // *** CHANGE HERE: Use currentSpeed for turning ***
+      // Use currentSpeed for turning
       right(currentSpeed); 
       lastDirectionCode = BTN_RIGHT;
       break;
@@ -310,19 +310,19 @@ float DistanceMeter() {
 // =======================================================
 void modeVictoryLap() {
   forward(50); delay(12000);
-  left(50); delay(600);
+  
+  // *** Swapped turning logic to match physical reversal ***
+  right(50); delay(600); // Now performs a LEFT turn
 
   forward(50); delay(5000);
-  left(50); delay(600);
+  right(50); delay(600); // Now performs a LEFT turn
 
   forward(50); delay(12000);
-  left(50); delay(600);
+  right(50); delay(600); // Now performs a LEFT turn
 
   forward(50); delay(5000);
-  left(50); delay(600);
+  right(50); delay(600); // Now performs a LEFT turn
 
-  left(70); delay(2000);
-  stopMotors();
 }
 
 // =======================================================
@@ -335,12 +335,12 @@ void backward(int s)
 { digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
 
 void left(int s)
-// Rotates left (Left wheel backward, Right wheel forward)
-{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+// Rotates left (Left wheel backward, Right wheel forward) - ORIGINAL RIGHT LOGIC HERE
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
 
 void right(int s)
-// Rotates right (Left wheel forward, Right wheel backward)
-{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+// Rotates right (Left wheel forward, Right wheel backward) - ORIGINAL LEFT LOGIC HERE
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
 
 void stopMotors()
 { analogWrite(PWMA,0); analogWrite(PWMB,0); }
