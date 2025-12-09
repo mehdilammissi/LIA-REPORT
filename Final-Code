@@ -46,7 +46,8 @@ int mode = 1;
 #define BTN_RIGHT  0xBC43FF00
 #define BTN_DOWN   0xEA15FF00
 #define BTN_OK     0xBF40FF00    // USED FOR SPEED UP
-#define BTN_STOP   0xE817FF00    // Common code for '0' button / SPEED DOWN
+// *** UPDATED BTN_STOP with confirmed '5' button code (0xE718FF00) ***
+#define BTN_STOP   0xE718FF00    // Confirmed code for '5' button / SPEED DOWN
 #define BTN_MODE1  0xE916FF00
 #define BTN_MODE2  0xE619FF00
 #define BTN_MODE3  0xF20DFF00
