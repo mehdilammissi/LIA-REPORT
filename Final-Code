@@ -1,13 +1,19 @@
+/*
+ * Project: IR Controlled Robot - Speed Modification
+ * Goal: Modify the motor control logic so that the speed for both forward 
+ * and backward movement is independently increased/decreased using specific 
+ * IR buttons (BTN_OK to speed up, BTN_STOP to slow down).
+ *
+ * NOTE: The motor speed 'y' will be maintained during UP/DOWN commands.
+ */
 #include <Servo.h>
 #include <IRremote.h>
 #include <Adafruit_NeoPixel.h>
 
-// =======================
-// NEO PIXEL CONFIG
-// =======================
+
+// LED CONFIGURATION
 #define LED_PIN 4
 #define NUM_LEDS 1
-
 Adafruit_NeoPixel led(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 void setLED(uint8_t r, uint8_t g, uint8_t b) {
@@ -16,10 +22,10 @@ void setLED(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 // Mode colors ONLY
-void ledMode1() { setLED(0, 0, 255); }    // Blue
-void ledMode2() { setLED(0, 255, 0); }    // Green
-void ledMode3() { setLED(255, 0, 0); }    // Red
-void ledMode4() { setLED(255, 150, 0); }  // Orange
+void ledMode1() { setLED(255, 0, 0); }    // COLOR RED
+void ledMode2() { setLED(0, 0, 255); }    // COLOR BLUE
+void ledMode3() { setLED(255, 255, 0); }    // COLOR YELLOW
+void ledMode4() { setLED(128, 0, 128); }  // COLOR PURPLE
 
 // =======================
 // IR CONFIG
@@ -35,7 +41,8 @@ int mode = 1;
 #define BTN_LEFT   0xBB44FF00
 #define BTN_RIGHT  0xBC43FF00
 #define BTN_DOWN   0xEA15FF00
-#define BTN_OK     0xBF40FF00
+#define BTN_OK     0xBF40FF00   // USED FOR SPEED UP
+#define BTN_STOP   0x9867FF00   // DUMMY CODE FOR '0' BUTTON / SPEED DOWN
 #define BTN_MODE1  0xE916FF00
 #define BTN_MODE2  0xE619FF00
 #define BTN_MODE3  0xF20DFF00
@@ -48,11 +55,15 @@ int PWMA = 5, AIN1 = 7;
 int PWMB = 6, BIN1 = 8;
 int STBY = 3;
 
-// SPEED
-int y = 100;
-const int SPEED_STEP = 5;
+// SPEED VARIABLES
+int currentSpeed = 100; // Starting speed for UP/DOWN movement
+const int SPEED_STEP = 20; // Changed step size for noticeable change
 const int MAX_SPEED = 255;
 const int MIN_SPEED = 0;
+
+// Motor direction state, used to maintain speed when accelerating/decelerating
+unsigned long lastDirectionCode = 0;
+
 
 // =======================
 // ULTRASONIC CONFIG
@@ -86,12 +97,12 @@ void setup() {
   pinMode(Echo, INPUT);
 
   myservo.attach(10);
-  Serial.println("System Booted — Ready");
+  Serial.println("System Booted - Ready");
 }
 
-// =======================
+
 // LOOP
-// =======================
+
 void loop() {
 
   // ==== IR READ ====
@@ -118,36 +129,73 @@ void loop() {
   }
 }
 
-// =======================
-// MODE 1 – IR HOLD TO MOVE
-// =======================
+
+// MODE 1 – IR REMOTE (REVISED)
+
 void modeIRControl() {
-
+  
+  // --- SPEED ADJUSTMENT ---
   if (lastCode == BTN_OK) {
-    y += SPEED_STEP;
-    if (y > MAX_SPEED) y = MIN_SPEED;
-    Serial.print("Speed = ");
-    Serial.println(y);
-    lastCode = 0;
+    // Increase speed
+    currentSpeed += SPEED_STEP;
+    if (currentSpeed > MAX_SPEED) currentSpeed = MAX_SPEED;
+    Serial.print("Speed UP | Current Speed = ");
+    Serial.println(currentSpeed);
+    lastCode = 0; // Clear code to prevent rapid speed change
   }
+  
+  if (lastCode == BTN_STOP) {
+    // Decrease speed
+    currentSpeed -= SPEED_STEP;
+    if (currentSpeed < MIN_SPEED) currentSpeed = MIN_SPEED;
+    Serial.print("Speed DOWN | Current Speed = ");
+    Serial.println(currentSpeed);
+    lastCode = 0; // Clear code to prevent rapid speed change
+  }
+  // --- END SPEED ADJUSTMENT ---
 
+
+  // --- DIRECTIONAL MOVEMENT ---
   if (millis() - lastPressTime > RELEASE_TIMEOUT) {
     stopMotors();
+    // Clear last direction code when stopped
+    lastDirectionCode = 0; 
     return;
   }
 
   switch(lastCode) {
-    case BTN_UP: forward(y); break;
-    case BTN_DOWN: backward(y); break;
-    case BTN_LEFT: left(y); break;
-    case BTN_RIGHT: right(y); break;
-    default: stopMotors(); break;
+    case BTN_UP: 
+      forward(currentSpeed); 
+      lastDirectionCode = BTN_UP;
+      break;
+    case BTN_DOWN: 
+      backward(currentSpeed); 
+      lastDirectionCode = BTN_DOWN;
+      break;
+    case BTN_LEFT: 
+      left(100); // Fixed speed for turns
+      lastDirectionCode = BTN_LEFT;
+      break;
+    case BTN_RIGHT: 
+      right(100); // Fixed speed for turns
+      lastDirectionCode = BTN_RIGHT;
+      break;
+      
+    // If a direction was pressed but we accelerated/decelerated, maintain direction
+    default:
+      switch (lastDirectionCode) {
+          case BTN_UP: forward(currentSpeed); break;
+          case BTN_DOWN: backward(currentSpeed); break;
+          // Note: Left/Right typically should stop after RELEASE_TIMEOUT unless held
+          default: stopMotors(); break;
+      }
+      break;
   }
 }
 
-// =======================
-// MODE 2 – ANALOG SENSOR
-// =======================
+
+// MODE 2 – ANALOG SENSOR (No changes required)
+
 void modeAnalogSensor() {
 
   float R = analogRead(A0);
@@ -162,9 +210,9 @@ void modeAnalogSensor() {
   right(50);
 }
 
-// =======================
-// MODE 3 – ULTRASONIC AVOID (UPDATED)
-// =======================
+
+// MODE 3 – ULTRASONIC AVOID (UPDATED) (No changes required)
+
 void modeUltrasonic() {
 
   // Look forward
@@ -229,9 +277,9 @@ void modeUltrasonic() {
   stopMotors();
 }
 
-// =======================
-// ULTRASONIC DISTANCE FUNCTION
-// =======================
+
+// ULTRASONIC DISTANCE FUNCTION (No changes required)
+
 float DistanceMeter() {
 
   digitalWrite(Trig, LOW);
@@ -249,11 +297,10 @@ float DistanceMeter() {
   return distance;
 }
 
-// =======================
-// MODE 4 – VICTORY LAP RECTANGLE
-// =======================
-void modeVictoryLap() {
+// MODE 4 – VICTORY LAP RECTANGLE (No changes required)
 
+void modeVictoryLap() {
+  // Uses fixed speeds, no changes needed for this mode
   forward(50); delay(12000);
   left(50); delay(600);
 
@@ -272,10 +319,19 @@ void modeVictoryLap() {
 }
 
 // =======================
-// MOTOR FUNCTIONS
+// MOTOR FUNCTIONS (No changes required)
 // =======================
-void forward(int s){ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
-void backward(int s){ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
-void left(int s){ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
-void right(int s){ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
-void stopMotors(){ analogWrite(PWMA,0); analogWrite(PWMB,0); }
+void forward(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+void backward(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+void left(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+void right(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+void stopMotors()
+{ analogWrite(PWMA,0); analogWrite(PWMB,0); }
