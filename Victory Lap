@@ -1,1 +1,126 @@
+/*
+ * Project: IR Controlled Robot - Mode 4: Victory Lap
+ * Goal: Run a fixed, pre-programmed movement sequence (e.g., a rectangle).
+ *
+ * WIRING:
+ * Motor Driver (L298N/similar): PWMA=5, AIN1=7, PWMB=6, BIN1=8, STBY=3
+ * LED -> 4
+ */
+#include <Servo.h>
+#include <Adafruit_NeoPixel.h>
 
+// LED CONFIGURATION
+#define LED_PIN 4
+#define NUM_LEDS 1
+Adafruit_NeoPixel led(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void setLED(uint8_t r, uint8_t g, uint8_t b) {
+  led.setPixelColor(0, led.Color(r, g, b));
+  led.show();
+}
+
+void ledMode4() { setLED(128, 0, 128); } // COLOR PURPLE
+
+// =======================
+// MOTOR CONFIG
+// =======================
+int PWMA = 5, AIN1 = 7;
+int PWMB = 6, BIN1 = 8;
+int STBY = 3;
+
+// FORWARD DECLARATIONS
+void forward(int s);
+void backward(int s);
+void left(int s);
+void right(int s);
+void stopMotors();
+
+
+// =======================
+// SETUP
+// =======================
+void setup() {
+  Serial.begin(9600);
+  led.begin();
+  led.show();
+  ledMode4();     // Default boot color (Purple for Mode 4)
+
+  // Setup motor pins
+  pinMode(PWMA, OUTPUT);
+  pinMode(AIN1, OUTPUT);
+  pinMode(PWMB, OUTPUT);
+  pinMode(BIN1, OUTPUT);
+  pinMode(STBY, OUTPUT);
+  digitalWrite(STBY, HIGH); // Enable the motor driver
+
+  Serial.println("System Booted - Mode 4: Victory Lap Ready");
+}
+
+
+// LOOP
+void loop() {
+  // === Pre-programmed Rectangle/Victory Lap ===
+  Serial.println("Starting Victory Lap");
+  
+  // Long side 1
+  forward(50); delay(12000);
+  stopMotors(); delay(500);
+  
+  // Turn 1 (Right Turn)
+  right(50); delay(600); 
+  stopMotors(); delay(500);
+
+  // Short side 1
+  forward(50); delay(5000);
+  stopMotors(); delay(500);
+  
+  // Turn 2 (Right Turn)
+  right(50); delay(600); 
+  stopMotors(); delay(500);
+
+  // Long side 2
+  forward(50); delay(12000);
+  stopMotors(); delay(500);
+  
+  // Turn 3 (Right Turn)
+  right(50); delay(600); 
+  stopMotors(); delay(500);
+
+  // Short side 2
+  forward(50); delay(5000);
+  stopMotors(); delay(500);
+  
+  // Turn 4 (Right Turn)
+  right(50); delay(600); 
+  stopMotors(); delay(500);
+
+  Serial.println("Victory Lap Complete. Resting...");
+  // Hold the loop here until the robot is reset or switched off
+  while(true) {
+    ledMode4(); 
+    delay(1000);
+    setLED(0, 0, 0); // Blink the LED
+    delay(1000);
+  }
+}
+
+
+// =======================================================
+// MOTOR FUNCTIONS (Corrected Logic for Turn-in-Place)
+// =======================================================
+void forward(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+void backward(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+// Turns LEFT: Left motor backward (LOW), Right motor forward (HIGH)
+void left(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+// Turns RIGHT: Left motor forward (HIGH), Right motor backward (LOW)
+void right(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+void stopMotors()
+{ analogWrite(PWMA,0); analogWrite(PWMB,0); }
