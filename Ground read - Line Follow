@@ -1,0 +1,127 @@
+/*
+ * Project: IR Controlled Robot - Mode 2: Analog Sensor Control
+ * Goal: Implement basic line-following or analog proximity control.
+ *
+ * WIRING:
+ * Motor Driver (L298N/similar): PWMA=5, AIN1=7, PWMB=6, BIN1=8, STBY=3
+ * Analog Sensors: R -> A0, M -> A1, L -> A2 (Based on your original code)
+ * LED -> 4
+ */
+#include <Servo.h>
+#include <Adafruit_NeoPixel.h>
+
+// LED CONFIGURATION
+#define LED_PIN 4
+#define NUM_LEDS 1
+Adafruit_NeoPixel led(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void setLED(uint8_t r, uint8_t g, uint8_t b) {
+  led.setPixelColor(0, led.Color(r, g, b));
+  led.show();
+}
+
+void ledMode2() { setLED(0, 0, 255); } // COLOR BLUE
+
+// =======================
+// MOTOR CONFIG
+// =======================
+int PWMA = 5, AIN1 = 7;
+int PWMB = 6, BIN1 = 8;
+int STBY = 3;
+
+// FORWARD DECLARATIONS
+void forward(int s);
+void backward(int s);
+void left(int s);
+void right(int s);
+void stopMotors();
+
+
+// =======================
+// SETUP
+// =======================
+void setup() {
+  Serial.begin(9600);
+  led.begin();
+  led.show();
+  ledMode2();     // Default boot color (Blue for Mode 2)
+
+  // Setup motor pins
+  pinMode(PWMA, OUTPUT);
+  pinMode(AIN1, OUTPUT);
+  pinMode(PWMB, OUTPUT);
+  pinMode(BIN1, OUTPUT);
+  pinMode(STBY, OUTPUT);
+  digitalWrite(STBY, HIGH); // Enable the motor driver
+  
+  // Analog pins A0, A1, A2 are inputs by default
+  Serial.println("System Booted - Mode 2: Analog Sensor Ready");
+}
+
+
+// LOOP
+void loop() {
+  // Read analog sensors
+  float R = analogRead(A0);
+  float M = analogRead(A1);
+  float L = analogRead(A2);
+
+  // Print sensor data for debugging
+  Serial.print("L:"); Serial.print(L);
+  Serial.print(" | M:"); Serial.print(M);
+  Serial.print(" | R:"); Serial.println(R);
+
+  // Line-following/Obstacle Logic (50 is a common default speed)
+  // Assuming a HIGH reading (>300) means an action is needed.
+  if (M > 1000) { 
+    stopMotors(); 
+    Serial.println("CENTER STOP");
+    return; 
+  }
+  
+  // Right sensor detects line/obstacle -> Turn Left
+  if (R > 300) { 
+    left(50); 
+    Serial.println("TURN LEFT");
+    return; 
+  }
+  
+  // Left sensor detects line/obstacle -> Turn Right
+  if (L > 300) { 
+    right(50); 
+    Serial.println("TURN RIGHT");
+    return; 
+  }
+  
+  // Middle sensor detects line/nothing (depending on sensor type) -> Move Forward
+  if (M > 300) { 
+    forward(50); 
+    Serial.println("FORWARD");
+    return; 
+  } 
+  
+  // Default action if no line/obstacle is detected (e.g., search/wander)
+  forward(50);
+  delay(10); // Small delay to avoid flooding the serial monitor
+}
+
+
+// =======================================================
+// MOTOR FUNCTIONS (Corrected Logic for Turn-in-Place)
+// =======================================================
+void forward(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+void backward(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+// Turns LEFT: Left motor backward (LOW), Right motor forward (HIGH)
+void left(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+// Turns RIGHT: Left motor forward (HIGH), Right motor backward (LOW)
+void right(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+void stopMotors()
+{ analogWrite(PWMA,0); analogWrite(PWMB,0); }
