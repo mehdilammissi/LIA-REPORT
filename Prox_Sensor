@@ -1,1 +1,182 @@
+/*
+ * Project: IR Controlled Robot - Mode 3: Ultrasonic Avoidance
+ * Goal: Implement object detection and avoidance using an ultrasonic sensor on a servo.
+ *
+ * WIRING:
+ * Motor Driver (L298N/similar): PWMA=5, AIN1=7, PWMB=6, BIN1=8, STBY=3
+ * Ultrasonic: Trig -> 13, Echo -> 12
+ * Servo -> 10
+ * LED -> 4
+ */
+#include <Servo.h>
+#include <Adafruit_NeoPixel.h>
 
+// LED CONFIGURATION
+#define LED_PIN 4
+#define NUM_LEDS 1
+Adafruit_NeoPixel led(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void setLED(uint8_t r, uint8_t g, uint8_t b) {
+  led.setPixelColor(0, led.Color(r, g, b));
+  led.show();
+}
+
+void ledMode3() { setLED(255, 255, 0); } // COLOR YELLOW
+
+// =======================
+// MOTOR CONFIG
+// =======================
+int PWMA = 5, AIN1 = 7;
+int PWMB = 6, BIN1 = 8;
+int STBY = 3;
+
+// ULTRASONIC/SERVO CONFIG
+Servo myservo;
+const int Trig = 13;
+const int Echo = 12;
+
+// FORWARD DECLARATIONS
+float DistanceMeter();
+void forward(int s);
+void backward(int s);
+void left(int s);
+void right(int s);
+void stopMotors();
+
+
+// =======================
+// SETUP
+// =======================
+void setup() {
+  Serial.begin(9600);
+  led.begin();
+  led.show();
+  ledMode3();     // Default boot color (Yellow for Mode 3)
+
+  // Setup motor pins
+  pinMode(PWMA, OUTPUT);
+  pinMode(AIN1, OUTPUT);
+  pinMode(PWMB, OUTPUT);
+  pinMode(BIN1, OUTPUT);
+  pinMode(STBY, OUTPUT);
+  digitalWrite(STBY, HIGH); // Enable the motor driver
+
+  // Ultrasonic pins
+  pinMode(Trig, OUTPUT);
+  pinMode(Echo, INPUT);
+
+  myservo.attach(10);
+  Serial.println("System Booted - Mode 3: Ultrasonic Avoidance Ready");
+}
+
+
+// LOOP
+void loop() {
+  // === Avoidance Logic ===
+  myservo.write(90); // Look forward
+  delay(50);
+  float forwardDistance = DistanceMeter();
+
+  if (forwardDistance == 0 || forwardDistance >= 25) {
+    forward(70);
+    return;
+  }
+
+  // Obstacle detected (< 25 cm), stop to evaluate
+  stopMotors();
+  delay(200);
+
+  // LOOK LEFT
+  myservo.write(180);
+  delay(500); // Give time for servo to move and sound wave to travel
+  float leftDistance = DistanceMeter();
+  if (leftDistance == 0) leftDistance = 300; // Treat failure to read as clear space
+
+  // LOOK RIGHT
+  myservo.write(0);
+  delay(500);
+  float rightDistance = DistanceMeter();
+  if (rightDistance == 0) rightDistance = 300;
+
+  // Print distances for debugging
+  Serial.print("Fwd: "); Serial.print(forwardDistance);
+  Serial.print(" | Left: "); Serial.print(leftDistance);
+  Serial.print(" | Right: "); Serial.println(rightDistance);
+  
+  // Decision logic (Prioritize the largest clear path > 25cm)
+  if (leftDistance > 25 && rightDistance > 25) {
+    // Both sides clear, turn toward the side with more space
+    if (leftDistance > rightDistance) {
+      left(70);
+      delay(1000);
+    } else {
+      right(70);
+      delay(1000);
+    }
+  } else if (leftDistance > 25) {
+    // Only left side is clear
+    left(70);
+    delay(1000);
+  } else if (rightDistance > 25) {
+    // Only right side is clear
+    right(70);
+    delay(1000);
+  } else {
+    // Blocked in front, left, and right. Back up and turn left as a last resort.
+    backward(70);
+    delay(600);
+    left(70);
+    delay(1000);
+  }
+
+  // Stop after avoidance turn before next loop check
+  stopMotors();
+}
+
+
+// =======================================================
+// ULTRASONIC DISTANCE FUNCTION
+// =======================================================
+float DistanceMeter() {
+  // Clears the Trig pin
+  digitalWrite(Trig, LOW);
+  delayMicroseconds(2);
+  // Sets the Trig pin to HIGH state for 10 micro-seconds
+  digitalWrite(Trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trig, LOW);
+
+  // Reads the Echo pin, returns the sound wave travel time in microseconds
+  // Timeout added for robustness
+  long duration = pulseIn(Echo, HIGH, 25000);
+  if (duration == 0) return 0;
+
+  // Calculate the distance in cm (Speed of sound is 343 m/s or 0.0343 cm/µs)
+  float distance = (duration * 0.0343) / 2.0;
+  
+  // Filter out unrealistically large distances
+  if (distance > 300) return 0;
+  
+  return distance;
+}
+
+
+// =======================================================
+// MOTOR FUNCTIONS (Corrected Logic for Turn-in-Place)
+// =======================================================
+void forward(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+void backward(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+// Turns LEFT: Left motor backward (LOW), Right motor forward (HIGH)
+void left(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+// Turns RIGHT: Left motor forward (HIGH), Right motor backward (LOW)
+void right(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+void stopMotors()
+{ analogWrite(PWMA,0); analogWrite(PWMB,0); }
