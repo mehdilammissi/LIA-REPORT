@@ -1,1 +1,180 @@
+/*
+ * Project: IR Controlled Robot - Mode 1: IR Remote Control
+ * Goal: Full manual control with speed scaling for all movements.
+ *
+ * WIRING:
+ * Motor Driver (L298N/similar): PWMA=5, AIN1=7, PWMB=6, BIN1=8, STBY=3
+ * IR Receiver -> 9
+ * LED -> 4
+ */
+#include <Servo.h>
+#include <IRremote.h>
+#include <Adafruit_NeoPixel.h>
 
+// LED CONFIGURATION
+#define LED_PIN 4
+#define NUM_LEDS 1
+Adafruit_NeoPixel led(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void setLED(uint8_t r, uint8_t g, uint8_t b) {
+  led.setPixelColor(0, led.Color(r, g, b));
+  led.show();
+}
+
+void ledMode1() { setLED(255, 0, 0); } // COLOR RED
+
+// =======================
+// IR CONFIG
+// =======================
+const int IR_RECEIVE_PIN = 9;
+unsigned long lastCode = 0;
+unsigned long lastPressTime = 0;
+const int RELEASE_TIMEOUT = 400; // Time (ms) after which motors stop if no button is held
+
+// IR BUTTONS (Using your confirmed codes)
+#define BTN_UP     0xB946FF00
+#define BTN_LEFT   0xBB44FF00
+#define BTN_RIGHT  0xBC43FF00
+#define BTN_DOWN   0xEA15FF00
+#define BTN_OK     0xBF40FF00    // SPEED UP
+#define BTN_STOP   0xE718FF00    // SPEED DOWN
+
+// =======================
+// MOTOR CONFIG
+// =======================
+int PWMA = 5, AIN1 = 7;
+int PWMB = 6, BIN1 = 8;
+int STBY = 3;
+
+// SPEED VARIABLES
+int currentSpeed = 100; // Starting speed for all movement
+const int SPEED_STEP = 20;
+const int MAX_SPEED = 255;
+const int MIN_SPEED = 0;
+
+// Motor direction state to maintain movement when speed changes
+unsigned long lastDirectionCode = 0;
+
+
+// =======================
+// FORWARD DECLARATIONS
+// =======================
+void forward(int s);
+void backward(int s);
+void left(int s);
+void right(int s);
+void stopMotors();
+
+
+// =======================
+// SETUP
+// =======================
+void setup() {
+  Serial.begin(9600);
+  IrReceiver.begin(IR_RECEIVE_PIN, ENABLE_LED_FEEDBACK);
+  led.begin();
+  led.show();
+  ledMode1();     // Default boot color (Red for Mode 1)
+
+  // Setup motor pins
+  pinMode(PWMA, OUTPUT);
+  pinMode(AIN1, OUTPUT);
+  pinMode(PWMB, OUTPUT);
+  pinMode(BIN1, OUTPUT);
+  pinMode(STBY, OUTPUT);
+  digitalWrite(STBY, HIGH); // Enable the motor driver
+
+  Serial.println("System Booted - Mode 1: IR Control Ready");
+}
+
+
+// LOOP
+void loop() {
+  // ==== IR READ ====
+  if (IrReceiver.decode()) {
+    unsigned long code = IrReceiver.decodedIRData.decodedRawData;
+    if (code != 0x0) lastCode = code;
+    lastPressTime = millis();
+    IrReceiver.resume();
+  }
+
+  // --- SPEED ADJUSTMENT ---
+  // Speed buttons only execute once per press by clearing lastCode
+  if (lastCode == BTN_OK) {
+    currentSpeed = constrain(currentSpeed + SPEED_STEP, MIN_SPEED, MAX_SPEED);
+    Serial.print("Speed UP | Current Speed = ");
+    Serial.println(currentSpeed);
+    lastCode = 0;
+  }
+  
+  if (lastCode == BTN_STOP) {
+    currentSpeed = constrain(currentSpeed - SPEED_STEP, MIN_SPEED, MAX_SPEED);
+    Serial.print("Speed DOWN | Current Speed = ");
+    Serial.println(currentSpeed);
+    lastCode = 0;
+  }
+  // --- END SPEED ADJUSTMENT ---
+
+
+  // --- DIRECTIONAL MOVEMENT ---
+  
+  // 1. If no button has been pressed for a while, stop and reset state
+  if (millis() - lastPressTime > RELEASE_TIMEOUT) {
+    stopMotors();
+    lastDirectionCode = 0;
+    return;
+  }
+
+  // 2. Execute movement based on the last code received
+  switch(lastCode) {
+    case BTN_UP:
+      forward(currentSpeed);
+      lastDirectionCode = BTN_UP;
+      break;
+    case BTN_DOWN:
+      backward(currentSpeed);
+      lastDirectionCode = BTN_DOWN;
+      break;
+    case BTN_LEFT:
+      // Speed scales with currentSpeed
+      left(currentSpeed);
+      lastDirectionCode = BTN_LEFT;
+      break;
+    case BTN_RIGHT:
+      // Speed scales with currentSpeed
+      right(currentSpeed);
+      lastDirectionCode = BTN_RIGHT;
+      break;
+      
+    // 3. If a speed button was pressed (lastCode=0), maintain last direction at the new speed
+    default:
+      switch (lastDirectionCode) {
+          case BTN_UP: forward(currentSpeed); break;
+          case BTN_DOWN: backward(currentSpeed); break;
+          // Note: Turns (LEFT/RIGHT) are NOT sticky and require continuous button hold
+          default: stopMotors(); break;
+      }
+      break;
+  }
+}
+
+
+// =======================================================
+// MOTOR FUNCTIONS (Corrected Logic for Turn-in-Place)
+// =======================================================
+void forward(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+void backward(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+// Turns LEFT: Left motor backward (LOW), Right motor forward (HIGH)
+void left(int s)
+{ digitalWrite(AIN1,LOW); analogWrite(PWMA,s); digitalWrite(BIN1,HIGH); analogWrite(PWMB,s); }
+
+// Turns RIGHT: Left motor forward (HIGH), Right motor backward (LOW)
+void right(int s)
+{ digitalWrite(AIN1,HIGH); analogWrite(PWMA,s); digitalWrite(BIN1,LOW); analogWrite(PWMB,s); }
+
+void stopMotors()
+{ analogWrite(PWMA,0); analogWrite(PWMB,0); }
